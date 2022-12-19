@@ -24,6 +24,9 @@ func recursive_size_find(pname string, waitGroup *sync.WaitGroup, results chan *
 	var partial Progress
 	if info.Mode()&fs.ModeSymlink != 0 {
 		// Don't follow symbolic links.
+	} else if info.Mode()&fs.ModeType == 0 { // Regular File
+		partial.size += info.Size()
+		results <- &partial
 	} else if info.IsDir() {
 		files, err := ioutil.ReadDir(pname)
 		if err != nil {
@@ -36,36 +39,31 @@ func recursive_size_find(pname string, waitGroup *sync.WaitGroup, results chan *
 			go recursive_size_find(path.Join(pname, file.Name()), waitGroup, results)
 		}
 	} else {
-		partial.size += info.Size()
-		results <- &partial
+		log.Println("WARNING: info.Mode() =", info.Mode(), "is unhandled.")
 	}
 	waitGroup.Done()
 }
 
-func main() {
+func mondu(fnames []string) Progress {
 	var waitGroup sync.WaitGroup
-	var waitGroup2 sync.WaitGroup
 	results := make(chan *Progress)
-	var progress Progress
-
-	// User gives a list of files as arguments to the program.
-	for _, arg := range os.Args[1:] {
+	for _, fname := range fnames {
 		waitGroup.Add(1)
-		go recursive_size_find(arg, &waitGroup, results)
+		go recursive_size_find(fname, &waitGroup, results)
 	}
-
-	waitGroup2.Add(1)
 	go func() {
-		go func() {
-			waitGroup.Wait()
-			close(results)
-		}()
-		for partial := range results {
-			progress.size += partial.size
-		}
-		waitGroup2.Done()
+		waitGroup.Wait()
+		close(results)
 	}()
 
-	waitGroup2.Wait()
+	var progress Progress
+	for partial := range results {
+		progress.size += partial.size
+	}
+	return progress
+}
+
+func main() {
+	progress := mondu(os.Args[1:])
 	log.Println("Total:", progress.size)
 }
