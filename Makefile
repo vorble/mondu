@@ -1,6 +1,6 @@
-mondu: main.go
-	go build -o mondu main.go
+mondu: mondu.go
+	go build mondu.go
 
 .PHONY: clean
 clean:
-	-rm -rf mondu
+	-go clean mondu.go
