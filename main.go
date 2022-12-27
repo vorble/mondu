@@ -46,7 +46,8 @@ func mondu(fnames []string) int64 {
 
 // path may be a file or directory path.
 func mondu_(pname string, wg *sync.WaitGroup, results chan int64) {
-	// !!! call wg.Done() before every return !!!
+	// Every return path must call wg.Done(), this is done via defer.
+	defer wg.Done()
 
 	info, err := os.Lstat(pname)
 
@@ -54,7 +55,6 @@ func mondu_(pname string, wg *sync.WaitGroup, results chan int64) {
 		if showErrors {
 			errfmt.Println(err)
 		}
-		wg.Done()
 		return
 	}
 
@@ -75,7 +75,6 @@ func mondu_(pname string, wg *sync.WaitGroup, results chan int64) {
 			if showErrors {
 				errfmt.Println(err)
 			}
-			wg.Done()
 			return
 		}
 
@@ -88,8 +87,6 @@ func mondu_(pname string, wg *sync.WaitGroup, results chan int64) {
 			errfmt.Println("WARNING: info.Mode() =", info.Mode(), "is unhandled.")
 		}
 	}
-
-	wg.Done()
 }
 
 func main() {
