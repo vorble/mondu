@@ -10,43 +10,42 @@ import (
 	"sync"
 )
 
-// Should errors be shown.
+// mondu doesn't stop on errors, so set this to false with the -q command line
+// option if you don't want to see errors.
 var showErrors bool = true
 
 // For writing to stderr.
 var errfmt = log.New(os.Stderr, "", 0)
 
 // Calculate the total recursive size of the file or directory names given.
-func mondu(fnames []string) int64 {
-	// Before each call to mondu_(), be sure to call wg.Add(1). mondu_() will call wg.Done() when it
-	// is finished.
-	var wg sync.WaitGroup
-	// The results are a series of sizes that should be totaled.
-	results := make(chan int64)
-
-	for _, fname := range fnames {
-		wg.Add(1)
-		go mondu_(fname, &wg, results)
-	}
-
-	// The for loop that follows terminates after the wait group finishes.
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
-
+func Mondu(fnames []string) int64 {
 	var total int64
 
-	for size := range results {
+	for size := range *getSizesConcurrently(fnames) {
 		total += size
 	}
 
 	return total
 }
 
-// path may be a file or directory path.
-func mondu_(pname string, wg *sync.WaitGroup, results chan int64) {
-	// Every return path must call wg.Done(), this is done via defer.
+func getSizesConcurrently(fnames []string) *chan int64 {
+	wg := sync.WaitGroup{}
+	results := make(chan int64)
+
+	for _, fname := range fnames {
+		go calculateSize(fname, &wg, results)
+	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	return &results
+}
+
+func calculateSize(pname string, wg *sync.WaitGroup, results chan int64) {
+	wg.Add(1)
 	defer wg.Done()
 
 	info, err := os.Lstat(pname)
@@ -79,8 +78,7 @@ func mondu_(pname string, wg *sync.WaitGroup, results chan int64) {
 		}
 
 		for _, file := range files {
-			wg.Add(1)
-			go mondu_(path.Join(pname, file.Name()), wg, results)
+			go calculateSize(path.Join(pname, file.Name()), wg, results)
 		}
 	} else {
 		if showErrors {
@@ -101,6 +99,6 @@ func main() {
 		}
 	}
 
-	size := mondu(fnames)
+	size := Mondu(fnames)
 	fmt.Println(size)
 }
